@@ -46,10 +46,11 @@ class BlancedShardAssigner(object):
 
         self.shards = [Shard(**shard) for shard in shards]
         self.nodes = [Node(**node) for node in nodes]
+        self.deadnodes = []
+        self.num_collections = len(set([shard["collection"] for shard in shards]))
         self.initialize()
         self.unassigned_shards = self.shards.copy()
-        self.num_collections = len(set([shard["collection"] for shard in shards]))
-        self.deadnodes = []
+
 
     def initialize(self):
         """
@@ -57,8 +58,9 @@ class BlancedShardAssigner(object):
         and give id to each shard
         """
         for i, node in enumerate(self.nodes):
-            if node.available_space < 0:
-                self.deadnodes.add(node)
+            if node.available_space <= 0:
+                self.deadnodes.append(node)
+                self.nodes.remove(node)
 
             node.num_id = str(i)
             node.balanced_usage = (
@@ -117,41 +119,45 @@ class BlancedShardAssigner(object):
         return node
 
     def find_cloest_shard(
-        self, shard_list: List[Shard], available_space: float
+        self, shard_list: List[Shard], target: float
     ) -> Shard:
         """
         Use binary search to find the shard that is closest to the average usage
         """
-        lo, hi = 0, len(shard_list)
+
         if not shard_list:
             return None
 
-        if hi == 1:
+        if target < shard_list[0].size:
             return shard_list[0]
-        if hi == 2:
-            return max(shard_list, key=lambda x: x.size)
+        
+        if target> shard_list[-1].size:
+            return shard_list[-1]
+        
+        lo, hi = 0, len(shard_list)
 
         while lo < hi:
             mid = (lo + hi) // 2
-            if shard_list[mid].size < available_space:
-                if mid > 0 and shard_list[mid - 1].size > available_space:
+            if  target < shard_list[mid].size :
+                if mid > 0 and shard_list[mid - 1].size < target:
                     return (
-                        shard_list[mid - 1]
-                        if abs(shard_list[mid].size - available_space)
-                        < abs(available_space - shard_list[mid - 1].size)
-                        else shard_list[mid]
+                        shard_list[mid]
+                        if abs(shard_list[mid].size - target)
+                        < abs(target - shard_list[mid - 1].size)
+                        else shard_list[mid-1]
                     )
-                lo = mid + 1
+                hi=mid
             else:
-                if mid > 0 and shard_list[mid + 1].size < available_space:
+                if mid < len(shard_list)-1 and shard_list[mid+1].size < target:
                     return (
-                        shard_list[mid + 1]
-                        if abs(shard_list[mid].size - available_space)
-                        < abs(available_space - shard_list[mid - 1].size)
-                        else shard_list[mid]
+                        shard_list[mid]
+                        if abs(shard_list[mid].size - target)
+                        < abs(target - shard_list[mid+1].size)
+                        else shard_list[mid+1]
                     )
-                hi = mid
-        return shard_list[lo] if lo < len(shard_list) else shard_list[lo - 1]
+                lo = mid+1
+
+        return shard_list[lo] 
 
     def get_shard(self, node: Node) -> Optional[Shard]:
         """
@@ -159,7 +165,7 @@ class BlancedShardAssigner(object):
         use binary search to find the shard that is closest to the average usage
         """
         shard_list = self.get_available_shards(node)
-        closest_shard = self.find_cloest_shard(shard_list, node.available_space)
+        closest_shard = self.find_cloest_shard(shard_list, node.balanced_usage - node.used_space)
         if closest_shard:
             self.unassigned_shards.remove(closest_shard)
         return closest_shard
