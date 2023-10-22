@@ -1,20 +1,61 @@
 import json
 import argparse
 import pdb
+from dataclasses import dataclass, field
 
 def load_data(file_name):
     with open(file_name) as f:
         return json.load(f, encoding='utf-8')
+    
+
+@dataclass
+class Shard(object):
+    id: str= field(init=False)
+    collection: str
+    shard: str
+    size: float
+
+@dataclass
+class Node(object):
+    id: str
+    num_id: str = field(init=False)
+    total_space: float
+    used_space: float
+    available_space: float= field(init=False)
+    balanced_usage: float= field(init=False)
+    def __post_init__(self):
+        """
+        calulate the available spalce of each node
+        and give id to each shard
+        """
+        self.available_space = self.total_space - self.used_space
+        # self.balanced_usage = 
+
+            # if node['available_space'] < 0:
+            #     self.deadnodes.add(node)
+            #     self.unused_nodes.remove(node)
+
+            # node['num_id'] = str(i)
+            # breakpoint()
+            # node['balanced_usage'] = (sum([node['used_space'] for node in self.unused_nodes]) \
+            # +sum([shard['size'] for shard in self.unassigned_shards])) / len(self.unassigned_shards)
+            # if node['available_space'] <= 0:
+            #     self.deadnodes.add(node['id'])
+    
+        
+
 
 
 class blancedShardAssigner(object):
     def __init__(self, shards, nodes):
+        
         self.shards = shards
         self.nodes = nodes
-        self.num_collections = len(set([shard['collection'] for shard in shards]))
-        self.used_shard = set()
-        self.deadnode = set()
         self.initialize()
+        self.unassigned_shards = self.shards.copy()
+        self.num_collections = len(set([shard['collection'] for shard in shards]))
+        self.availble_nodes = self.nodes.copy()
+        self.deadnodes = []
     
     def initialize(self):
         """
@@ -23,9 +64,15 @@ class blancedShardAssigner(object):
         """
         for i, node in enumerate(self.nodes):
             node['available_space'] = node['total_space'] - node['used_space']
+            if node['available_space'] < 0:
+                self.deadnodes.add(node)
+                self.unused_nodes.remove(node)
+
             node['num_id'] = str(i)
-            node['average_usage'] = (sum([node['used_space'] for node in self.nodes]) \
-            +sum([shard['size'] for shard in self.shards])) / (len(self.nodes)*self.num_collections)
+            node['balanced_usage'] = (sum([node['used_space'] for node in self.nodes]) \
+            +sum([shard['size'] for shard in self.shards])) / len(self.shards)
+            if node['available_space'] <= 0:
+                self.deadnodes.add(node['id'])
         
         for i, shard in enumerate(self.shards):
             shard['id'] = str(i)
@@ -40,27 +87,29 @@ class blancedShardAssigner(object):
             return True
         return False
 
-    def update_available_shard_list(self, node):
+    def get_available_shards(self, node):
         """
         update the shard list
         """
-        shard_list = [shard for shard in self.shards if self.can_allocate(node,shard) and shard['id'] not in self.used_shard]
-        shard_list = sorted(shard_list, key=lambda x: x['size'])
-        return shard_list
+        available_shards = [shard for shard in self.shards if self.can_allocate(node,shard) and shard  in self.unassigned_shards]
+        available_shards.sort(key=lambda x: x['size'])
+        return available_shards
     
-    def get_available_nodes(self, node, shard):
-        availabe_nodes = [node for node in self.nodes if node not in self.deadnode]
-        if not availabe_nodes:
+    def get_available_nodes(self):
+        self.availabe_nodes = [node for node in self.nodes if node not in self.deadnodes]
+        if not self.availabe_nodes:
             raise ValueError("no available nodes")
-        availabe_nodes = sorted(availabe_nodes, key=lambda x: x['available_space'], reverse=True)
+        self.availabe_nodes.sort(key=lambda x: x['available_space'], reverse=True)
         
-        return availabe_nodes
+        # return availabe_nodes
 
     def update_nodes_usage(self, node, shard):
+    
         node['used_space'] += shard['size']
         node['available_space'] -= shard['size']
-        node['average_usage'] = (sum([node['used_space'] for node in self.nodes]) \
-            +sum([shard['size'] for shard in self.shards])) / (len(self.nodes)*self.num_collections)
+        if self.unassigned_shards:
+            node['balanced_usage'] = (sum([node['used_space'] for node in self.availble_nodes]) \
+                +sum([shard['size'] for shard in self.unassigned_shards])) / len(self.unassigned_shards)
         return node
             
     
@@ -87,37 +136,36 @@ class blancedShardAssigner(object):
                 if mid > 0 and shard_list[mid+1]['size'] < available_space:
                     return shard_list[mid+1] if abs(shard_list[mid]['size'] - available_space) < abs(available_space - shard_list[mid-1]['size']) else shard_list[mid]
                 hi = mid 
-        
-        return shard_list[lo]
+        return shard_list[lo] if lo < len(shard_list) else shard_list[lo-1]
 
     
-    def get_shard(self, node, average_usage):
+    def get_shard(self, node):
         """
         get the shard which is assigned to the node
         use binary search to find the shard that is closest to the average usage
         """
-        shard_list = self.update_available_shard_list(node)
-        available_space = average_usage - node['used_space']
-        closest_shard = self.find_cloest_shard(shard_list, available_space)
+        shard_list = self.get_available_shards(node)
+        closest_shard = self.find_cloest_shard(shard_list, node['available_space'])
         if closest_shard:
-            self.used_shard.add(closest_shard['id'])
+            self.unassigned_shards.remove(closest_shard)
         return closest_shard
 
 
-    def balance(self, nodes, shards):
+    def balance(self):
         """
         the main function to balance the shards
         """
         res = []
         # sort the nodes by their effective weight in descending order
-        availabe_nodes = self.get_available_nodes(nodes, shards)
+        self.get_available_nodes()
         for _ in range(self.num_collections):
-            for node in availabe_nodes:
+            for node in self.availabe_nodes:
                 shard = self.get_shard(node)
                 if shard:
                     self.update_nodes_usage(node, shard)
                     res.append({'id': node['id'], 'collection': shard['collection'], 'shard': shard['shard']})
-
+                if node['available_space'] <= 0:
+                    self.deadnodes.add(node)
         return res
     
     def assign_replica(self, res):
@@ -147,7 +195,7 @@ def main(args):
     shards = load_data(args.shards)
     nodes = load_data(args.nodes)
     bsa = blancedShardAssigner(shards, nodes)
-    res = bsa.balance(nodes, shards)
+    res = bsa.balance()
     print("assignment", res)
     replica = bsa.assign_replica(res)
     print("replica", replica)
