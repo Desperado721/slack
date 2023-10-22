@@ -10,38 +10,25 @@ def load_data(file_name):
 
 @dataclass
 class Shard(object):
-    id: str= field(init=False)
+    id: str= field(init=False, default='0')
     collection: str
     shard: str
     size: float
 
 @dataclass
 class Node(object):
-    id: str
-    num_id: str = field(init=False)
+    id: str =field(init=False, default='0')
+    num_id: str = field(init=False, default='0')
     total_space: float
     used_space: float
     available_space: float= field(init=False)
-    balanced_usage: float= field(init=False)
+    balanced_usage: float= field(init=False,default=0.0)
     def __post_init__(self):
         """
         calulate the available spalce of each node
         and give id to each shard
         """
         self.available_space = self.total_space - self.used_space
-        # self.balanced_usage = 
-
-            # if node['available_space'] < 0:
-            #     self.deadnodes.add(node)
-            #     self.unused_nodes.remove(node)
-
-            # node['num_id'] = str(i)
-            # breakpoint()
-            # node['balanced_usage'] = (sum([node['used_space'] for node in self.unused_nodes]) \
-            # +sum([shard['size'] for shard in self.unassigned_shards])) / len(self.unassigned_shards)
-            # if node['available_space'] <= 0:
-            #     self.deadnodes.add(node['id'])
-    
         
 
 
@@ -66,13 +53,11 @@ class blancedShardAssigner(object):
             node['available_space'] = node['total_space'] - node['used_space']
             if node['available_space'] < 0:
                 self.deadnodes.add(node)
-                self.unused_nodes.remove(node)
 
             node['num_id'] = str(i)
             node['balanced_usage'] = (sum([node['used_space'] for node in self.nodes]) \
             +sum([shard['size'] for shard in self.shards])) / len(self.shards)
-            if node['available_space'] <= 0:
-                self.deadnodes.add(node['id'])
+
         
         for i, shard in enumerate(self.shards):
             shard['id'] = str(i)
@@ -101,7 +86,6 @@ class blancedShardAssigner(object):
             raise ValueError("no available nodes")
         self.availabe_nodes.sort(key=lambda x: x['available_space'], reverse=True)
         
-        # return availabe_nodes
 
     def update_nodes_usage(self, node, shard):
     
