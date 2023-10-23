@@ -15,6 +15,18 @@ def shards():
         {"collection": "coll_2", "shard": "shard2", "size": 600},
     ]
 
+@pytest.fixture
+def large_shards():
+    return [
+        {"collection": "coll_0", "shard": "shard1", "size": 30000},
+        {"collection": "coll_0", "shard": "shard2", "size": 20000},
+        {"collection": "coll_1", "shard": "shard1", "size": 90000},
+        {"collection": "coll_1", "shard": "shard2", "size": 10000},
+        {"collection": "coll_2", "shard": "shard1", "size": 15000},
+        {"collection": "coll_2", "shard": "shard2", "size": 6000},
+    ]
+
+
 
 @pytest.fixture
 def full_nodes():
@@ -43,17 +55,11 @@ def BSA(shards, nodes):
 
 @pytest.fixture
 def BSA_result():
-    return [
-        {"id": "nodeA", "collection": "coll_0", "shard": "shard1"},
-        {"id": "nodeD", "collection": "coll_2", "shard": "shard2"},
-        {"id": "nodeB", "collection": "coll_0", "shard": "shard2"},  # 4000+2000=6000
-        {
-            "id": "nodeA",
-            "collection": "coll_2",
-            "shard": "shard1",
-        },  # 2000+1500+3000=6500
-        {"id": "nodeD", "collection": "coll_1", "shard": "shard2"},
-    ]  # 3000+1000+600=4600
+    return [{'collection': 'coll_0', 'id': 'nodeA', 'shard': 'shard1'}, # nodeA: 2000+3000+600=5600
+            {'collection': 'coll_0', 'id': 'nodeD', 'shard': 'shard2'}, # nodeD: 3000+2000+1000=6000
+            {'collection': 'coll_2', 'id': 'nodeB', 'shard': 'shard1'}, # nodeB: 4000+1500=5500
+            {'collection': 'coll_2', 'id': 'nodeA', 'shard': 'shard2'},
+            {'collection': 'coll_1', 'id': 'nodeD', 'shard': 'shard2'}]
 
 
 def test_no_node_available(full_nodes, shards):
@@ -69,12 +75,11 @@ def test_replica_larger_than_nodes(BSA_result, nodes, shards):
     mock_args = Namespace(replica=5, shards="data/shards.json", nodes="data/nodes.json")
     patch("src.assign_shards.load_data", return_value=shards)
     patch("src.assign_shards.load_data", return_value=nodes)
-    patch("src.assign_shards.BlancedShardAssigner.balance", return_value=BSA_result)
     with pytest.raises(ValueError):
         main(mock_args)
 
 
-def test_no_node_available():
+def test_no_shard_available(nodes, large_shards):
     mock_args = Namespace(replica=1, shards="data/shards.json", nodes="data/nodes.json")
     patch("src.assign_shards.load_data", return_value=shards)
     patch("src.assign_shards.load_data", return_value=nodes)

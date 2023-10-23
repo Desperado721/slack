@@ -76,8 +76,6 @@ class BlancedShardAssigner(object):
 
         for i, shard in enumerate(self.shards):
             shard.id = str(i)
-        
-        self.update_unassigned_shards()
 
         for i, node in enumerate(self.nodes):
             node.num_id = str(i)
@@ -85,12 +83,14 @@ class BlancedShardAssigner(object):
                 self.deadnodes.append(node)
 
         self.update_available_nodes()
+        self.update_unassigned_shards()
 
         for i, node in enumerate(self.nodes):
             node.balanced_usage = (
                 sum([node.used_space for node in self.nodes])
                 + sum([shard.size for shard in self.unassigned_shards])
             ) / len(self.nodes)
+
 
     def can_allocate(self, node: Node, shard: Shard) -> bool:
         """
@@ -142,7 +142,7 @@ class BlancedShardAssigner(object):
             self.deadnodes.add(node)
         return node
 
-    def find_cloest_shard(
+    def find_closest_shard(
         self, shard_list: List[Shard], target: float
     ) -> Shard:
         """
@@ -189,13 +189,17 @@ class BlancedShardAssigner(object):
         use binary search to find the shard that is closest to the average usage
         """
         shard_list = self.get_available_shards(node)
-        closest_shard = self.find_cloest_shard(shard_list, node.balanced_usage - node.used_space)
+        closest_shard = self.find_closest_shard(shard_list, node.balanced_usage - node.used_space)
         if closest_shard:
             self.unassigned_shards.remove(closest_shard)
         
         return closest_shard
     
     def update_unassigned_shards(self):
+        """
+        Update the unassigned_shards to ensure that the shard that is assigned will not
+        be allocated again
+        """
         for shard in self.unassigned_shards:
             if shard.size > max([node.available_space for node in self.nodes]):
                 logging.warning("The size shard %s  is %s, which is larger than the maximum available \
@@ -203,6 +207,7 @@ class BlancedShardAssigner(object):
                                       max([node.available_space for node in self.nodes]))
                 self.unassigned_shards.remove(shard)
                 self.cantassigned_shards.append(shard)
+        
 
 
     def balance(self):
