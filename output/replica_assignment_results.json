@@ -1,0 +1,26 @@
+[
+    {
+        "id": "shard1",
+        "collections": "coll_0",
+        "replica_node_id": "nodeB",
+        "replica_id": "0"
+    },
+    {
+        "id": "shard2",
+        "collections": "coll_0",
+        "replica_node_id": "nodeA",
+        "replica_id": "0"
+    },
+    {
+        "id": "shard1",
+        "collections": "coll_1",
+        "replica_node_id": "nodeB",
+        "replica_id": "0"
+    },
+    {
+        "id": "shard2",
+        "collections": "coll_1",
+        "replica_node_id": "nodeA",
+        "replica_id": "0"
+    }
+]

@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 import logging
 import sys
 
+logging.basicConfig(level=logging.INFO)
+
 def load_data(file_name: str):
     """
     load the data from the json file
@@ -17,6 +19,15 @@ def load_data(file_name: str):
     with open(file_name) as f:
         return json.load(f, encoding="utf-8")
 
+def write_to_file(output_file: str, data: Union[List[dict], dict]):
+    """
+    write the data to the output file
+
+    param: output_file: the file name of the output file
+    param: data: the data to be written to the output file
+    """
+    with open(output_file, "w") as f:
+        json.dump(data, f, indent=4)
 
 @dataclass
 class Shard(object):
@@ -48,6 +59,7 @@ class BlancedShardAssigner(object):
         self.shards = [Shard(**shard) for shard in shards]
         self.nodes = [Node(**node) for node in nodes]
         self.deadnodes = []
+        self.available_nodes = self.nodes.copy()
         self.num_collections = len(set([shard["collection"] for shard in shards]))
         self.unassigned_shards = self.shards.copy()
         self.cantassigned_shards = []
@@ -64,16 +76,17 @@ class BlancedShardAssigner(object):
 
         for i, shard in enumerate(self.shards):
             shard.id = str(i)
-
-        for i, shard in enumerate(self.shards):
-            self.update_unassigned_shards()
         
+        self.update_unassigned_shards()
+
         for i, node in enumerate(self.nodes):
+            node.num_id = str(i)
             if node.available_space <= 0:
                 self.deadnodes.append(node)
-                self.nodes.remove(node)
 
-            node.num_id = str(i)
+        self.update_available_nodes()
+
+        for i, node in enumerate(self.nodes):
             node.balanced_usage = (
                 sum([node.used_space for node in self.nodes])
                 + sum([shard.size for shard in self.unassigned_shards])
@@ -102,27 +115,27 @@ class BlancedShardAssigner(object):
         available_shards.sort(key=lambda x: x.size)
         return available_shards
 
-    def get_available_nodes(self) -> List[Node]:
+    def update_available_nodes(self):
         """
         Get a list of available nodes which have enough space to receive shards
         """
-        availabe_nodes = [node for node in self.nodes if node not in self.deadnodes]
-        if not availabe_nodes:
-            raise ValueError("no available nodes")
+        self.available_nodes = [node for node in self.nodes if node not in self.deadnodes]
+        if not self.available_nodes:
+            logging.info("no available nodes, stop assigning shards")
+            sys.exit(1)
         # sort the nodes by their available_space in descending order
-        availabe_nodes.sort(key=lambda x: x.available_space, reverse=True)
-        return availabe_nodes
+        self.available_nodes.sort(key=lambda x: x.available_space, reverse=True)
 
-    def update_nodes(self, node: Node, shard: Shard) -> Node:
+    def update_nodes_usage(self, node: Node, shard: Shard) -> Node:
         """
         Update the usage of the node after the shard is assigned to the node
         """
         node.used_space += shard.size
         node.available_space -= shard.size
-        availble_nodes = self.get_available_nodes()
+        self.update_available_nodes()
         if self.unassigned_shards:
             node.balanced_usage = (
-                sum([node.used_space for node in availble_nodes])
+                sum([node.used_space for node in self.available_nodes])
                 + sum([shard.size for shard in self.unassigned_shards])
             ) / len(self.unassigned_shards)
         if node.available_space <= 0:
@@ -197,13 +210,13 @@ class BlancedShardAssigner(object):
         The main function to balance the shards
         """
         res = []
-        available_nodes = self.get_available_nodes()
+        self.update_available_nodes()
         for _ in range(self.num_collections):
             while self.unassigned_shards:
-                for node in available_nodes:
+                for node in self.available_nodes:
                     shard = self.get_shard(node)
                     if shard:
-                        self.update_nodes(node, shard)
+                        self.update_nodes_usage(node, shard)
                         res.append(
                             {
                                 "id": node.id,
@@ -214,13 +227,13 @@ class BlancedShardAssigner(object):
                     self.update_unassigned_shards()
         return res
 
-    def assign_replica(self, res):
+    def assign_replica(self, res, replica):
         """
         Assign the replica shards to the nodes
         replica should not be in the same node with the original shard
         we can use round robin to assign the replica shards
         """
-        if args.replica >= len(self.nodes):
+        if replica >= len(self.nodes):
             raise ValueError(
                 "The number of replica should  be smaller than the number of nodes"
             )
@@ -232,7 +245,7 @@ class BlancedShardAssigner(object):
             # sort nodes by their available space reversely
             nodes = sorted(node_list, key=lambda x: x.available_space, reverse=True)
             # round robin to assign the replica shards
-            for j in range(args.replica):
+            for j in range(replica):
                 replica_node_id = nodes[(i + j) % len(nodes)].id
                 res_replica.append(
                     {
@@ -251,9 +264,13 @@ def main(args):
     nodes = load_data(args.nodes)
     bsa = BlancedShardAssigner(shards, nodes)
     res = bsa.balance()
-    print("assignment", res)
-    replica = bsa.assign_replica(res)
-    print("replica", replica)
+    logging.info("The result of shard assignment is %s", res)
+    logging.info("Writing assignment to file %s", "output/shard_assignment_results.json")
+    write_to_file("output/shard_assignment_results.json", res)
+    replica = bsa.assign_replica(res, args.replica)
+    logging.info("The result of replica assignment is %s", replica) 
+    logging.info("Writing replica assignment to file %s", "output/replica_assignment_results.json")
+    write_to_file("output/replica_assignment_results.json", replica)
 
 
 if __name__ == "__main__":

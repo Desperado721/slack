@@ -1,0 +1,5 @@
+.pytest_cache
+.ipython_checkpoint
+src/__pycache__
+tests/units/__pycache__
+tests/integrations/__pycache__
