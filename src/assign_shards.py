@@ -122,7 +122,7 @@ class BlancedShardAssigner(object):
         self.available_nodes = [node for node in self.nodes if node not in self.deadnodes]
         if not self.available_nodes:
             logging.info("no available nodes, stop assigning shards")
-            sys.exit(1)
+            return
         # sort the nodes by their available_space in descending order
         self.available_nodes.sort(key=lambda x: x.available_space, reverse=True)
 
@@ -202,11 +202,13 @@ class BlancedShardAssigner(object):
         """
         for shard in self.unassigned_shards:
             if shard.size > max([node.available_space for node in self.nodes]):
-                logging.warning("The size shard %s  is %s, which is larger than the maximum available \
-                                space %s, it can't be allocated", shard.id, shard.size, \
-                                      max([node.available_space for node in self.nodes]))
+                logging.warning("The size shard %s  is %s, which is larger than the maximum available space %s, it can't be allocated",\
+                                 shard.id, shard.size, max([node.available_space for node in self.nodes]))
                 self.unassigned_shards.remove(shard)
                 self.cantassigned_shards.append(shard)
+        if not self.unassigned_shards:
+            logging.info("All shards are assigned, stop assigning shards")
+            return
         
 
 
@@ -215,7 +217,6 @@ class BlancedShardAssigner(object):
         The main function to balance the shards
         """
         res = []
-        self.update_available_nodes()
         for _ in range(self.num_collections):
             while self.unassigned_shards:
                 for node in self.available_nodes:
