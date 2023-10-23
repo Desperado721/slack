@@ -5,7 +5,8 @@ import json
 import argparse
 from typing import List, Union, Optional
 from dataclasses import dataclass, field
-
+import logging
+import sys
 
 def load_data(file_name: str):
     """
@@ -48,15 +49,25 @@ class BlancedShardAssigner(object):
         self.nodes = [Node(**node) for node in nodes]
         self.deadnodes = []
         self.num_collections = len(set([shard["collection"] for shard in shards]))
-        self.initialize()
         self.unassigned_shards = self.shards.copy()
+        self.cantassigned_shards = []
+        self.initialize()
 
 
     def initialize(self):
         """
-        calulate the available spalce of each node
+        Calulate the available space, balanced_usage of each node
         and give id to each shard
+
+        Note: balanced_usage is the average usage of each node after unassigned shards are assigned
         """
+
+        for i, shard in enumerate(self.shards):
+            shard.id = str(i)
+
+        for i, shard in enumerate(self.shards):
+            self.update_unassigned_shards()
+        
         for i, node in enumerate(self.nodes):
             if node.available_space <= 0:
                 self.deadnodes.append(node)
@@ -65,15 +76,12 @@ class BlancedShardAssigner(object):
             node.num_id = str(i)
             node.balanced_usage = (
                 sum([node.used_space for node in self.nodes])
-                + sum([shard.size for shard in self.shards])
-            ) / len(self.shards)
-
-        for i, shard in enumerate(self.shards):
-            shard.id = str(i)
+                + sum([shard.size for shard in self.unassigned_shards])
+            ) / len(self.nodes)
 
     def can_allocate(self, node: Node, shard: Shard) -> bool:
         """
-        check if the shard can be allocated to the node
+        Check if the shard can be allocated to the node
         """
 
         if node.available_space >= shard.size:
@@ -82,7 +90,7 @@ class BlancedShardAssigner(object):
 
     def get_available_shards(self, node: Node) -> List[Shard]:
         """
-        update the available_shards to ensure that the shard can be allocated to the node 
+        Update the available_shards to ensure that the shard can be allocated to the node 
         and is not assigned to any node
         """
         available_shards = [
@@ -90,6 +98,7 @@ class BlancedShardAssigner(object):
             for shard in self.shards
             if self.can_allocate(node, shard) and shard in self.unassigned_shards
         ]
+        
         available_shards.sort(key=lambda x: x.size)
         return available_shards
 
@@ -104,18 +113,20 @@ class BlancedShardAssigner(object):
         availabe_nodes.sort(key=lambda x: x.available_space, reverse=True)
         return availabe_nodes
 
-    def update_nodes_usage(self, node: Node, shard: Shard) -> Node:
+    def update_nodes(self, node: Node, shard: Shard) -> Node:
         """
         Update the usage of the node after the shard is assigned to the node
         """
-        availble_nodes = self.get_available_nodes()
         node.used_space += shard.size
         node.available_space -= shard.size
+        availble_nodes = self.get_available_nodes()
         if self.unassigned_shards:
             node.balanced_usage = (
                 sum([node.used_space for node in availble_nodes])
                 + sum([shard.size for shard in self.unassigned_shards])
             ) / len(self.unassigned_shards)
+        if node.available_space <= 0:
+            self.deadnodes.add(node)
         return node
 
     def find_cloest_shard(
@@ -168,39 +179,50 @@ class BlancedShardAssigner(object):
         closest_shard = self.find_cloest_shard(shard_list, node.balanced_usage - node.used_space)
         if closest_shard:
             self.unassigned_shards.remove(closest_shard)
+        
         return closest_shard
+    
+    def update_unassigned_shards(self):
+        for shard in self.unassigned_shards:
+            if shard.size > max([node.available_space for node in self.nodes]):
+                logging.warning("The size shard %s  is %s, which is larger than the maximum available \
+                                space %s, it can't be allocated", shard.id, shard.size, \
+                                      max([node.available_space for node in self.nodes]))
+                self.unassigned_shards.remove(shard)
+                self.cantassigned_shards.append(shard)
+
 
     def balance(self):
         """
-        the main function to balance the shards
+        The main function to balance the shards
         """
         res = []
         available_nodes = self.get_available_nodes()
         for _ in range(self.num_collections):
-            for node in available_nodes:
-                shard = self.get_shard(node)
-                if shard:
-                    self.update_nodes_usage(node, shard)
-                    res.append(
-                        {
-                            "id": node.id,
-                            "collection": shard.collection,
-                            "shard": shard.shard,
-                        }
-                    )
-                if node.available_space <= 0:
-                    self.deadnodes.add(node)
+            while self.unassigned_shards:
+                for node in available_nodes:
+                    shard = self.get_shard(node)
+                    if shard:
+                        self.update_nodes(node, shard)
+                        res.append(
+                            {
+                                "id": node.id,
+                                "collection": shard.collection,
+                                "shard": shard.shard,
+                            }
+                        )
+                    self.update_unassigned_shards()
         return res
 
     def assign_replica(self, res):
         """
-        assign the replica shards to the nodes
+        Assign the replica shards to the nodes
         replica should not be in the same node with the original shard
         we can use round robin to assign the replica shards
         """
-        if args.replica > len(self.nodes):
+        if args.replica >= len(self.nodes):
             raise ValueError(
-                "The number of replica should not be larger than the number of nodes"
+                "The number of replica should  be smaller than the number of nodes"
             )
 
         res_replica = []

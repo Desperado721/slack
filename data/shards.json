@@ -1,22 +1,32 @@
 [
   {
-    "collection": "coll_0",
-    "shard": "shard1",
-    "size": 369700165
+      "collection": "coll_0",
+      "shard": "shard1",
+      "size": 3000
   },
   {
-    "collection": "coll_0",
-    "shard": "shard2",
-    "size": 369120056
+      "collection": "coll_0",
+      "shard": "shard2",
+      "size": 2000
   },
   {
-    "collection": "coll_1",
-    "shard": "shard1",
-    "size": 54596115
+      "collection": "coll_1",
+      "shard": "shard1",
+      "size": 9000
   },
   {
-    "collection": "coll_1",
-    "shard": "shard2",
-    "size": 54755928
+      "collection": "coll_1",
+      "shard": "shard2",
+      "size": 1000
+  },
+          {
+      "collection": "coll_2",
+      "shard": "shard1",
+      "size": 1500
+  },
+  {
+      "collection": "coll_2",
+      "shard": "shard2",
+      "size": 600
   }
 ]

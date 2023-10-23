@@ -1,12 +1,23 @@
 [
-    {
-      "used_space": 408300054,
-      "total_space": 1000000000,
-      "id": "nodeA"
-    },
-    {
-      "used_space": 413292226,
-      "total_space": 1000000000,
-      "id": "nodeB"
+  {
+  "used_space": 2000,
+  "total_space": 10000,
+  "id": "nodeA"
+  },
+  {
+  "used_space": 4000,
+  "total_space": 10000,
+  "id": "nodeB"
+  },
+  {
+  "used_space": 10000,
+  "total_space": 10000,
+  "id": "nodeC"
+  },
+  {
+    "used_space": 3000,
+    "total_space": 10000,
+    "id": "nodeD"
     }
-  ]
+
+]    
