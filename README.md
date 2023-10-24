@@ -6,6 +6,7 @@ This is a script to assign shards among different nodes in a balanced way by usi
 
 - [Installation](#installation)
 - [Usage](#usage)
+- [Questions](#questions)
 
 
 ## Installation
