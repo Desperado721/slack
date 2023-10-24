@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 """
 This is a script to assign shards to nodes in a balanced way.
 """
@@ -84,6 +86,14 @@ class BlancedShardAssigner(object):
 
         self.update_available_nodes()
         self.update_unassigned_shards()
+
+        if not self.available_nodes:
+            logging.info("no available nodes, stop assigning shards")
+            sys.exit(1)
+        
+        if not self.unassigned_shards:
+            logging.info("All shards are assigned, stop assigning shards")
+            sys.exit(1)
 
         for i, node in enumerate(self.nodes):
             node.balanced_usage = (
@@ -200,15 +210,17 @@ class BlancedShardAssigner(object):
         Update the unassigned_shards to ensure that the shard that is assigned will not
         be allocated again
         """
+        if not self.unassigned_shards:
+            logging.info("All shards are assigned, stop assigning shards")
+            return
+        
         for shard in self.unassigned_shards:
             if shard.size > max([node.available_space for node in self.nodes]):
                 logging.warning("The size shard %s  is %s, which is larger than the maximum available space %s, it can't be allocated",\
                                  shard.id, shard.size, max([node.available_space for node in self.nodes]))
-                self.unassigned_shards.remove(shard)
                 self.cantassigned_shards.append(shard)
-        if not self.unassigned_shards:
-            logging.info("All shards are assigned, stop assigning shards")
-            return
+        
+        self.unassigned_shards = [shard for shard in self.unassigned_shards if shard not in self.cantassigned_shards]
         
 
 

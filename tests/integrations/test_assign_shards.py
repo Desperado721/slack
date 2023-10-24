@@ -1,8 +1,6 @@
 import pytest
 from src.assign_shards import BlancedShardAssigner, main
-from unittest.mock import patch
 from argparse import Namespace
-import logging
 
 
 @pytest.fixture
@@ -64,25 +62,23 @@ def BSA_result():
 
 
 def test_no_node_available(full_nodes, shards, caplog):
-    with caplog.at_level(logging.INFO):
+    with pytest.raises(SystemExit) as pytest_wrapped_e:
         BSA = BlancedShardAssigner(shards=shards, nodes=full_nodes)
-        assert "no available nodes, stop assigning shards" in caplog.text
+
+    assert pytest_wrapped_e.type == SystemExit
+    assert pytest_wrapped_e.value.code == 1
 
 
-
-def test_replica_larger_than_nodes(nodes, shards):
+def test_replica_larger_than_nodes():
     mock_args = Namespace(replica=5, shards="data/shards.json", nodes="data/nodes.json")
-    patch("src.assign_shards.load_data", return_value=shards)
-    patch("src.assign_shards.load_data", return_value=nodes)
     with pytest.raises(ValueError):
         main(mock_args)
 
 
-def test_no_shard_available(nodes, large_shards, caplog):
-    mock_args = Namespace(replica=1, shards="data/shards.json", nodes="data/nodes.json")
-    patch("src.assign_shards.load_data", return_value=large_shards)
-    patch("src.assign_shards.load_data", return_value=nodes)
+def test_no_shard_available(nodes, large_shards):
     
-    with caplog.at_level(logging.INFO):
-        main(mock_args)
-        assert "All shards are assigned, stop assigning shards" in caplog.text
+    with pytest.raises(SystemExit) as pytest_wrapped_e:
+        BSA = BlancedShardAssigner(shards=large_shards, nodes=nodes)
+
+    assert pytest_wrapped_e.type == SystemExit
+    assert pytest_wrapped_e.value.code == 1
