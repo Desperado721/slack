@@ -1,4 +1,4 @@
-# Project Name
+# Project: Shard Assigner
 
 This is a script to assign shards among different nodes in a balanced way by using binary search
 
