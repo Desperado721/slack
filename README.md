@@ -54,5 +54,5 @@ The output will be written in `output`, and also printed out in terminal.
 `/tests`: the folder where the tests are stored
 
 
-## Question
+## Questions
 Sometime you may run into `module src not found` problem, run ` pip install -e .` will likely fix it 
