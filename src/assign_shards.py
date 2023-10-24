@@ -143,7 +143,7 @@ class BlancedShardAssigner(object):
             logging.info("no available nodes, stop assigning shards")
             return
         # sort the nodes by their available_space in descending order
-        self.available_nodes.sort(key=lambda x: x.available_space, reverse=False)
+        self.available_nodes.sort(key=lambda x: x.available_space, reverse=True)
 
     def update_nodes_usage(self, node: Node, shard: Shard) -> Node:
         """
